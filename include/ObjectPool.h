@@ -1,9 +1,4 @@
-#include "iostream"
-#include <time.h>
-#include <vector>
-using std::cout;
-using std::endl;
-
+#include "Common.h"
 // 定长对象的内存池，非类型模版
 // template<size_t N>
 // class ObjectPool {};
@@ -30,7 +25,7 @@ public:
 
       // obj = static_cast<T *>(_memory);
       obj = (T *)_memory;
-      // 申请的对象至少得放一个指针，比如64位下申请一个int对象就不行
+      //  申请的对象至少得放一个指针，比如64位下申请一个int对象就不行
       size_t objSize = sizeof(T) < sizeof(void *) ? sizeof(void *) : sizeof(T);
       _memory += objSize;
       _remainBytes -= objSize;
@@ -48,6 +43,8 @@ public:
     obj->~T();
     // freeList头插，无论是空链表还是非空都适用
     // 无论是32位还是64位都能用，因为解引用得到的是一个指针
+
+    // 不可以在 TreeNode* 和 void** 这两种没有继承关系的类型之间转换
     //*(static_cast<void **>(obj)) = _freeList;
     *((void **)obj) = _freeList;
     _freeList = obj;

@@ -1,15 +1,27 @@
 #pragma once
+#include <algorithm>
 #include <cassert>
 #include <iostream>
 #include <thread>
 #include <time.h>
 #include <vector>
 
+#include <mutex>
 #include <pthread.h>
 #include <unistd.h>
 
 using std::cout;
 using std::endl;
+
+#ifdef _WIN64
+typedef unsigned long long PAGE_ID;
+#elif _WIN32
+typedef size_t PAGE_ID;
+#elif __LP64__
+typedef unsigned long long PAGE_ID;
+#else // linux 32
+typedef size_t PAGE_ID;
+#endif
 
 static const size_t MAX_BYTES = 256 * 1024; // Thread Cache最大可以取256 KB
 static const size_t NFREELISTS = 208;
@@ -28,6 +40,13 @@ public:
     NextObj(obj) = _freeList;
     _freeList = obj;
   };
+
+  //支持范围内push多个对象
+  void PushRange(void *start, void *end) {
+    NextObj(end) = _freeList;
+    _freeList = start;
+  }
+
   // 自由链表头删
   void *Pop() {
     //头删
@@ -39,8 +58,11 @@ public:
 
   bool Empty() { return _freeList == nullptr; }
 
+  size_t &MaxSize() { return _maxSize; }
+
 private:
   void *_freeList = nullptr;
+  size_t _maxSize = 1;
 };
 
 //管理对象大小的对齐映射规则
@@ -84,6 +106,19 @@ public:
     }
   }
 
+  //一次thread cache 从 central cache 获取多少个对象
+  static size_t NumMoveSize(size_t size) {
+    assert(size > 0);
+    //[2, 512]，一次批量移动多少个对象的（慢启动）上限值
+    // 小对象一次批量上限高
+    int num = MAX_BYTES / size;
+    if (num < 2)
+      num = 2;
+    if (num > 512)
+      num = 512;
+    return num;
+  }
+
   //计算映射的是哪一个自由链表桶
   // static inline size_t _Index(size_t size, size_t align_num) {
   //  if (size % align_num == 0) {
@@ -116,4 +151,57 @@ public:
       assert(false);
     return -1;
   }
+};
+
+// 管理多个连续页的大块内存结构
+struct Span {
+  PAGE_ID _pageID = 0;   // 大块内存起始页的页号
+  size_t _n = 0;         // 页数
+  Span *_next = nullptr; //双向链表的机构
+  Span *_prev = nullptr;
+
+  size_t _useCound = 0; //切成的小块内存，被分配给 thread cache 的计数
+  void *_freeList = nullptr; //切好的小块内存的自由链表
+};
+
+// 带头双向循环链表
+class SpanList {
+public:
+  // std::mutex GetMutex() {
+  //   return this->_mtx;
+  // }
+public:
+  // 必须要用构造函数初始化
+  SpanList() {
+    _head = new Span;
+    _head->_next = _head;
+    _head->_prev = _head;
+  }
+
+  // 向前插入
+  void Insert(Span *pos, Span *newSpan) {
+    assert(pos);
+    assert(newSpan);
+    Span *prev = pos->_prev;
+    prev->_next = newSpan;
+    newSpan->_prev = prev;
+    newSpan->_next = pos;
+    pos->_prev = newSpan;
+  }
+
+  void Erase(Span *pos) {
+    assert(pos);
+    assert(pos != _head);
+    Span *prev = pos->_prev;
+    Span *next = pos->_next;
+    prev->_next = next;
+    next->_prev = prev;
+    //不要delete pos，因为之后要还给Page Cache
+  }
+
+private:
+  Span *_head = nullptr;
+
+public:
+  std::mutex _mtx; // 桶锁
 };

@@ -1,4 +1,7 @@
 #include "../include/ObjectPool.h"
+#include "../include/ThreadCache.h"
+#include "../include/CentralCache.h"
+#include "../include/PageCache.h"
 
 struct TreeNode {
   int _val;

@@ -32,6 +32,7 @@ void *ThreadCache::Allocate(size_t size) {
   size_t index = SizeClass::Index(size);
 
   if (!_freeLists[index].Empty()) {
+    // pop from free list to fetch some prepared free block to use
     return _freeLists[index].Pop();
   } else {
     return FetchFromCentralCache(index, align_size);

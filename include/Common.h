@@ -138,6 +138,7 @@ public:
     if (size <= 128) {
       return _Index(size, 3);
     } else if (size <= 1024) {
+      // align_shift == 4 means align to 2^4 Byte
       return _Index(size - 128, 4) + group_array[0];
     } else if (size <= 8 * 1024) {
       return _Index(size - 1024, 7) + group_array[1] + group_array[0];

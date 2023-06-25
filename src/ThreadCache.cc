@@ -10,6 +10,7 @@ void *ThreadCache::FetchFromCentralCache(size_t index, size_t size) {
     _freeLists[index].MaxSize() += 1;
   }
 
+  // start和end用来表示获取到的第一个和最后一个内存块
   void *start = nullptr;
   void *end = nullptr;
   size_t actualNum =
@@ -20,7 +21,7 @@ void *ThreadCache::FetchFromCentralCache(size_t index, size_t size) {
     assert(start == end);
     return start;
   } else {
-    _freeLists[index].PushRange(NextObj(start), end);
+    _freeLists[index].PushRange(NextObj(start), end, actualNum - 1);
     return start;
   }
   return nullptr;
@@ -46,4 +47,17 @@ void ThreadCache::Deallocate(void *ptr, size_t size) {
   // 找出映射的自由链表桶，把对象插入进去
   size_t index = SizeClass::Index(size);
   _freeLists[index].Push(ptr);
+
+  // 当链表长度大于一次批量申请的内存时就还一段list给Central Cache
+  if (_freeLists[index].Size() >= _freeLists[index].MaxSize()) {
+    ListTooLong(_freeLists[index], size);
+  }
+}
+
+void ThreadCache::ListTooLong(FreeList &list, size_t size) {
+  void *start = nullptr;
+  void *end = nullptr;
+  list.PopRange(start, end, list.MaxSize());
+
+  CentralCache::GetInstance()->ReleaseListToSpans(start, size);
 }

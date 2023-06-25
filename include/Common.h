@@ -4,15 +4,18 @@
 #include <iostream>
 #include <thread>
 #include <time.h>
+#include <unordered_map>
 #include <vector>
 
 #include <mutex>
 #include <pthread.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 using std::cout;
 using std::endl;
 
+// different page ID for different OS
 #ifdef _WIN64
 typedef unsigned long long PAGE_ID;
 #elif _WIN32
@@ -23,8 +26,35 @@ typedef unsigned long long PAGE_ID;
 typedef size_t PAGE_ID;
 #endif
 
+inline static void *SystemAlloc(size_t kpage) {
+#ifdef _WIN32
+  void *ptr =
+      VirtualAlloc(0, kpage << 13, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+#else
+  // linux下brk mmap等
+  size_t size_byte = kpage << 13;
+  void *ptr = nullptr;
+  ptr = sbrk(0);
+  if (sbrk(size_byte) == (void *)-1) {
+    ptr = mmap(nullptr, size_byte, PROT_READ | PROT_WRITE,
+               MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (ptr == (void *)-1) {
+      ptr = nullptr;
+    }
+  }
+
+#endif
+
+  if (ptr == nullptr)
+    throw std::bad_alloc();
+
+  return ptr;
+}
+
 static const size_t MAX_BYTES = 256 * 1024; // Thread Cache最大可以取256 KB
 static const size_t NFREELISTS = 208;
+static const size_t NPAGES = 129;
+static const size_t PAGE_SHIFT = 13;
 
 //找下一个对象，void**强转后解引用可以适用于32和64位
 static void *&NextObj(void *obj) { return *(void **)obj; }
@@ -39,12 +69,28 @@ public:
     //*(void **)obj = _freeList;
     NextObj(obj) = _freeList;
     _freeList = obj;
+    _size++;
   };
 
   //支持范围内push多个对象
-  void PushRange(void *start, void *end) {
+  void PushRange(void *start, void *end, size_t n) {
     NextObj(end) = _freeList;
     _freeList = start;
+    _size += n;
+  }
+
+  void PopRange(void *&start, void *&end, size_t n) {
+    assert(n >= _size);
+    start = _freeList;
+    end = start;
+
+    for (size_t i = 0; i < n - 1; i++) {
+      end = NextObj(end);
+    }
+
+    _freeList = NextObj(end);
+    NextObj(end) = nullptr;
+    _size -= n;
   }
 
   // 自由链表头删
@@ -53,6 +99,7 @@ public:
     assert(_freeList);
     void *obj = _freeList;
     _freeList = NextObj(obj);
+    --_size;
     return obj;
   };
 
@@ -60,9 +107,12 @@ public:
 
   size_t &MaxSize() { return _maxSize; }
 
+  size_t Size() { return _size; }
+
 private:
   void *_freeList = nullptr;
-  size_t _maxSize = 1;
+  size_t _maxSize = 1; //用于慢启动调整算法
+  size_t _size;
 };
 
 //管理对象大小的对齐映射规则
@@ -119,6 +169,20 @@ public:
     return num;
   }
 
+  // 一次NewSpan要给多少page
+  static size_t NumMovePage(size_t size) {
+    size_t num = NumMoveSize(size);
+    // num*size 是总的字节数，PAGE_SHIFT是字节到页的转换
+    size_t npage = num * size;
+    npage >>= PAGE_SHIFT;
+    // 至少给一页
+    if (npage == 0) {
+      npage = 1;
+    }
+
+    return npage;
+  }
+
   //计算映射的是哪一个自由链表桶
   // static inline size_t _Index(size_t size, size_t align_num) {
   //  if (size % align_num == 0) {
@@ -156,13 +220,16 @@ public:
 
 // 管理多个连续页的大块内存结构
 struct Span {
-  PAGE_ID _pageID = 0;   // 大块内存起始页的页号
-  size_t _n = 0;         // 页数
-  Span *_next = nullptr; //双向链表的机构
+  PAGE_ID _pageID = 0; // 大块内存起始页的页号
+  size_t _n = 0;       // 页数
+
+  Span *_next = nullptr; // 双向链表的机构
   Span *_prev = nullptr;
 
-  size_t _useCound = 0; //切成的小块内存，被分配给 thread cache 的计数
-  void *_freeList = nullptr; //切好的小块内存的自由链表
+  size_t _useCount = 0; // 切成的小块内存，被分配给 thread cache 的计数
+  void *_freeList = nullptr; // 切好的小块内存的自由链表
+
+  bool _isUse = false; // 是否在被使用
 };
 
 // 带头双向循环链表
@@ -178,8 +245,22 @@ public:
     _head->_next = _head;
     _head->_prev = _head;
   }
+  // 遍历，不封装迭代器，直接用节点指针
+  Span *Begin() { return _head->_next; }
 
-  // 向前插入
+  Span *End() { return _head; }
+
+  bool Empty() { return _head->_next == _head; }
+
+  void PushFront(Span *span) { Insert(Begin(), span); }
+
+  Span *PopFront() {
+    Span *front = _head->_next;
+    Erase(front); //记住Erase中并没有delete pos
+    return front;
+  }
+
+  // pos前插入
   void Insert(Span *pos, Span *newSpan) {
     assert(pos);
     assert(newSpan);
@@ -201,7 +282,7 @@ public:
   }
 
 private:
-  Span *_head = nullptr;
+  Span *_head = nullptr; // 哨兵位
 
 public:
   std::mutex _mtx; // 桶锁

@@ -3,6 +3,8 @@
 
 void *ThreadCache::FetchFromCentralCache(size_t index, size_t size) {
   // 慢开始反馈调整算法：大对象给多一点，小对象给少一点
+
+  // 一开始给少一点，MaxSize慢慢加
   size_t batchNum =
       std::min(_freeLists[index].MaxSize(), SizeClass::NumMoveSize(size));
 
@@ -13,6 +15,7 @@ void *ThreadCache::FetchFromCentralCache(size_t index, size_t size) {
   // start和end用来表示获取到的第一个和最后一个内存块
   void *start = nullptr;
   void *end = nullptr;
+  // actualNum是实际返回的内存块的数量，若有的话一次会多给几个，至少得给一个
   size_t actualNum =
       CentralCache::GetInstance()->FetchRangeObj(start, end, batchNum, size);
   assert(actualNum > 1); //至少得给1个
@@ -24,7 +27,6 @@ void *ThreadCache::FetchFromCentralCache(size_t index, size_t size) {
     _freeLists[index].PushRange(NextObj(start), end, actualNum - 1);
     return start;
   }
-  return nullptr;
 }
 
 void *ThreadCache::Allocate(size_t size) {
@@ -53,11 +55,13 @@ void ThreadCache::Deallocate(void *ptr, size_t size) {
     ListTooLong(_freeLists[index], size);
   }
 }
-
+// 自由链表太长了，往回回收内存
 void ThreadCache::ListTooLong(FreeList &list, size_t size) {
   void *start = nullptr;
   void *end = nullptr;
+  // start是输出型参数，从list中拿下来后再给ReleaseListToSpans用
   list.PopRange(start, end, list.MaxSize());
 
+  // 返回给Central Cache
   CentralCache::GetInstance()->ReleaseListToSpans(start, size);
 }

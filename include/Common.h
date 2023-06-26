@@ -56,7 +56,8 @@ static const size_t NFREELISTS = 208;
 static const size_t NPAGES = 129;
 static const size_t PAGE_SHIFT = 13;
 
-//找下一个对象，void**强转后解引用可以适用于32和64位
+// 获取内存对象中存储的头4或头8字节，即连接的下一个对象的地址
+// void**强转后解引用可以适用于32和64位
 static void *&NextObj(void *obj) { return *(void **)obj; }
 
 // 管理切分好的小对象的自由列表
@@ -84,6 +85,7 @@ public:
     start = _freeList;
     end = start;
 
+    // 少走一步
     for (size_t i = 0; i < n - 1; i++) {
       end = NextObj(end);
     }
@@ -173,14 +175,13 @@ public:
   static size_t NumMovePage(size_t size) {
     size_t num = NumMoveSize(size);
     // num*size 是总的字节数，PAGE_SHIFT是字节到页的转换
-    size_t npage = num * size;
-    npage >>= PAGE_SHIFT;
+    size_t nByte = num * size;
+    size_t nPage = nByte >> PAGE_SHIFT;
     // 至少给一页
-    if (npage == 0) {
-      npage = 1;
+    if (nPage == 0) {
+      nPage = 1;
     }
-
-    return npage;
+    return nPage;
   }
 
   //计算映射的是哪一个自由链表桶
@@ -229,7 +230,7 @@ struct Span {
   size_t _useCount = 0; // 切成的小块内存，被分配给 thread cache 的计数
   void *_freeList = nullptr; // 切好的小块内存的自由链表
 
-  bool _isUse = false; // 是否在被使用
+  bool _isUse = false; // 是否在被使用，用于ReleaseSpanToPageCache中判断合并用
 };
 
 // 带头双向循环链表

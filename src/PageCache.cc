@@ -12,18 +12,17 @@ Span *PageCache::NewSpan(size_t k) {
   }
   // 检查一下后面的桶里面有没有span，如果有可以把它切分
   for (size_t i = k + 1; i < NPAGES; i++) {
-    if (!_spanLists[i].Empty()) {
+    if (!_spanLists[i].Empty()) { //有桶不为空
       Span *nSpan = _spanLists[i].PopFront();
       Span *kSpan = new Span;
-      // 在nSpan的头部切一个k页下来
-      // k页span返回
-      // nSpan再挂到对应映射的位置
+      // 在nSpan的头部切一个k页下来（尾切也可以）
       kSpan->_pageID = nSpan->_pageID;
       kSpan->_n = k;
 
       nSpan->_pageID += k;
       nSpan->_n -= k;
 
+      // nSpan被切走k页后，要重新挂到n号桶上
       _spanLists[nSpan->_n].PushFront(nSpan);
 
       // 存储nSpan的首尾页号与nSpan的映射，方便Page
@@ -33,10 +32,11 @@ Span *PageCache::NewSpan(size_t k) {
       _idSpanMap[nSpan->_pageID + nSpan->_n - 1] = nSpan;
 
       // 建立id和span的映射，方便Central Cache回收小块时，查找对应的span
-      for (PAGE_ID i = kSpan->_pageID; i < kSpan->_n; i++) {
+      for (PAGE_ID i = 0; i < kSpan->_n; i++) {
         _idSpanMap[kSpan->_pageID + i] = kSpan;
       }
 
+      // k页span返回
       return kSpan;
     }
   }
@@ -50,6 +50,7 @@ Span *PageCache::NewSpan(size_t k) {
 
   _spanLists[bigSpan->_n].PushFront(bigSpan);
 
+  //递归重新分割需要的span
   return NewSpan(k);
 }
 
@@ -59,13 +60,14 @@ Span *PageCache::MapObjectToSpan(void *obj) {
   if (ret != _idSpanMap.end()) {
     return ret->second;
   } else {
+    //一定能找到，找不到说明NewSpan里错了
     assert(false);
     return nullptr;
   }
 }
 
 void PageCache::ReleaseSpanToPageCache(Span *span) {
-  // 对span前后的页，尝试进行合并，缓解内存碎片问题
+  // 对span前后的页，尝试进行合并，缓解外内存碎片问题
   while (1) {
     PAGE_ID prevID = span->_pageID - 1;
     auto ret = _idSpanMap.find(prevID);
@@ -89,6 +91,7 @@ void PageCache::ReleaseSpanToPageCache(Span *span) {
     span->_n += prevSpan->_n;
 
     _spanLists[prevSpan->_n].Erase(prevSpan);
+    // TODO: 为什么要delete？
     delete prevSpan;
   }
 
@@ -116,7 +119,8 @@ void PageCache::ReleaseSpanToPageCache(Span *span) {
   }
 
   _spanLists[span->_n].PushFront(span);
-  span->_isUse = false;
+  span->_isUse = false; // 置为false，可以被别人继续合并
+  // 将首尾放进映射
   _idSpanMap[span->_pageID] = span;
   _idSpanMap[span->_pageID + span->_n - 1] = span;
 }

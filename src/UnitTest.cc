@@ -46,8 +46,6 @@ void TestAddressShift() {
   PAGE_ID id2 = 2001;
   char *p1 = (char *)(id1 << PAGE_SHIFT);
   char *p2 = (char *)(id2 << PAGE_SHIFT);
-  cout << p1 << endl;
-  cout << p2 << endl;
 
   while (p1 < p2) {
     cout << (void *)p1 << ":" << ((PAGE_ID)p1 >> PAGE_SHIFT) << endl;
@@ -57,6 +55,7 @@ void TestAddressShift() {
 
 int main() {
   // TestObjetPool();
-  TLSTest();
+  // TLSTest();
+  TestAddressShift();
   return 0;
 }

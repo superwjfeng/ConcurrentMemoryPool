@@ -160,22 +160,21 @@ void TestMultiThread() {
 }
 
 void BigAlloc() {
-  void *p1 = ConcurrentAlloc(257*1024);
+  void *p1 = ConcurrentAlloc(257 * 1024);
   ConcurrentFree(p1);
 
-  void *p2 = ConcurrentAlloc(129*8*1024);
+  void *p2 = ConcurrentAlloc(129 * 8 * 1024);
   ConcurrentFree(p2);
 }
 
-
-//int main() {
-//  //TestObjectPool();
-//  //TLSTest();
-//  //TestAddressShift();
-//  //TestConcurrentAlloc1();
-//  //TestConcurrentAlloc2();
-//  //TestConcurrentFree1();
-//  //TestMultiThread();
-//  BigAlloc();
-//  return 0;
-//}
+// int main() {
+//   //TestObjectPool();
+//   //TLSTest();
+//   //TestAddressShift();
+//   //TestConcurrentAlloc1();
+//   //TestConcurrentAlloc2();
+//   //TestConcurrentFree1();
+//   //TestMultiThread();
+//   BigAlloc();
+//   return 0;
+// }

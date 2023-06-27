@@ -8,23 +8,33 @@
 #include <vector>
 
 #include <mutex>
-#include <pthread.h>
-#include <sys/mman.h>
-#include <unistd.h>
+
+//循环include，完全错误
+//#include "ThreadCache.h"
+//#include "CentralCache.h"
+//#include "PageCache.h"
+//#include "ObjectPool.h"
+//#include "ConcurrentAlloc.h"
 
 using std::cout;
 using std::endl;
 
 // different page ID for different OS
 #ifdef _WIN64
+#include <windows.h>
 typedef unsigned long long PAGE_ID;
 #elif _WIN32
+#include <windows.h>
 typedef size_t PAGE_ID;
 #elif __LP64__
 typedef unsigned long long PAGE_ID;
 #else // linux 32
+#include <pthread.h>
+#include <sys/mman.h>
+#include <unistd.h>
 typedef size_t PAGE_ID;
 #endif
+
 
 inline static void *SystemAlloc(size_t kpage) {
 #ifdef _WIN32
@@ -49,6 +59,14 @@ inline static void *SystemAlloc(size_t kpage) {
     throw std::bad_alloc();
 
   return ptr;
+}
+
+inline static void SystemFree(void *ptr) {
+#ifdef _WIN32
+  VirtualFree(ptr, 0, MEM_RELEASE);
+#else
+  // Linux 32 sbrk unmmap
+#endif
 }
 
 static const size_t MAX_BYTES = 256 * 1024; // Thread Cache最大可以取256 KB
@@ -114,7 +132,7 @@ public:
 private:
   void *_freeList = nullptr;
   size_t _maxSize = 1; //用于慢启动调整算法
-  size_t _size;
+  size_t _size = 0; //哈希桶对应的FreeList挂了多少个内存块
 };
 
 //管理对象大小的对齐映射规则
@@ -126,21 +144,22 @@ public:
   // [1024+1,8*1024]         128byte对齐       freelist[72,128)
   // [8*1024+1,64*1024]      1024byte对齐      freelist[128,184)
   // [64*1024+1,256*1024]    8*1024byte对齐    freelist[184,208)
+  //static inline size_t _RoundUp(size_t size, size_t align_num) {
+  //  size_t align_size;
+  //  if (size % 8 != 0) {
+  //    align_size = (size / align_num + 1) * align_num;
+  //  } else {
+  //    align_size = size;
+  //  }
+  //  return align_size;
+  //}
+
+  // 一种非常巧妙的算法
   static inline size_t _RoundUp(size_t size, size_t align_num) {
-    size_t align_size;
-    if (size % 8 != 0) {
-      align_size = (size / align_num + 1) * align_num;
-    } else {
-      align_size = size;
-    }
-    return align_size;
+    return ((size + align_num - 1) & ~(align_num - 1));
   }
 
-  //// 一种非常巧妙的算法
-  // size_t _RoundUp(size_t size, size_t align_num) {
-  //   return ((size + align_num - 1) & ~(align_num - 1));
-  // }
-
+  //注意：RoundUp返回的是对齐到的字节数
   static inline size_t RoundUp(size_t size) {
     if (size <= 128) {
       return _RoundUp(size, 8);
@@ -153,8 +172,8 @@ public:
     } else if (size <= 256 * 1024) {
       return _RoundUp(size, 8 * 1024);
     } else {
-      assert(false);
-      return -1;
+      //超过256KB的大内存块以页为单位对齐
+      return _RoundUp(size, 1 << PAGE_SHIFT);
     }
   }
 
@@ -221,16 +240,17 @@ public:
 
 // 管理多个连续页的大块内存结构
 struct Span {
-  PAGE_ID _pageID = 0; // 大块内存起始页的页号
-  size_t _n = 0;       // 页数
+  PAGE_ID _pageID = 0;          // 大块内存起始页的页号
+  size_t _n = 0;                // 页数
 
-  Span *_next = nullptr; // 双向链表的机构
+  Span *_next = nullptr;        // 双向链表的机构
   Span *_prev = nullptr;
 
-  size_t _useCount = 0; // 切成的小块内存，被分配给 thread cache 的计数
-  void *_freeList = nullptr; // 切好的小块内存的自由链表
+  size_t _objSize = 0;          // 切好的小对象的大小
+  size_t _useCount = 0;         // 切成的小块内存，被分配给 thread cache 的计数
+  void *_freeList = nullptr;    // 切好的小块内存的自由链表
 
-  bool _isUse = false; // 是否在被使用，用于ReleaseSpanToPageCache中判断合并用
+  bool _isUse = false;          // 是否在被使用，用于ReleaseSpanToPageCache中判断合并用
 };
 
 // 带头双向循环链表

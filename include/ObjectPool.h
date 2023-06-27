@@ -1,3 +1,4 @@
+#pragma once
 #include "Common.h"
 // 定长对象的内存池，非类型模版
 // template<size_t N>
@@ -18,7 +19,8 @@ public:
       //剩余内存不够一个对象大小时，就放弃它，然后重新申请大块内存
       if (_remainBytes < sizeof(T)) {
         _remainBytes = 128 * 1024;
-        _memory = static_cast<char *>(malloc(_remainBytes));
+        //_memory = static_cast<char *>(malloc(_remainBytes));
+        _memory = static_cast<char *>(SystemAlloc(_remainBytes >> 13));
         if (_memory == nullptr)
           throw std::bad_alloc();
       }
@@ -32,7 +34,7 @@ public:
     }
 
     //定位new，显式调用T的构造函数初始化
-    new (obj) T;
+    new(obj)T;
 
     return obj;
   }

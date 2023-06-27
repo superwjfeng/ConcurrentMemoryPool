@@ -24,6 +24,7 @@ Span *CentralCache::GetOneSpan(SpanList &list, size_t size) {
   PageCache::GetInstance()->getPageMtx().lock();
   Span *span = PageCache::GetInstance()->NewSpan(SizeClass::NumMovePage(size));
   span->_isUse = true; // 在被使用了，防止被PageCache误合并归还
+  span->_objSize = size;
   PageCache::GetInstance()->getPageMtx().unlock();
 
   // 切分获取到的span不需要加锁，因为此时还没有挂到SpanList上，
@@ -46,6 +47,8 @@ Span *CentralCache::GetOneSpan(SpanList &list, size_t size) {
     tail = NextObj(tail);
     start += size;
   }
+
+  NextObj(tail) = nullptr; // why?
 
   // 当切好span以后，需要把span挂到桶里面去的时候再加锁
   // i.e. 只要访问桶，就需要加锁

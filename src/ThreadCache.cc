@@ -6,7 +6,7 @@ void *ThreadCache::FetchFromCentralCache(size_t index, size_t size) {
 
   // 一开始给少一点，MaxSize慢慢加
   size_t batchNum =
-      std::min(_freeLists[index].MaxSize(), SizeClass::NumMoveSize(size));
+      min(_freeLists[index].MaxSize(), SizeClass::NumMoveSize(size));
 
   if (_freeLists[index].MaxSize() == batchNum) {
     _freeLists[index].MaxSize() += 1;
@@ -16,9 +16,10 @@ void *ThreadCache::FetchFromCentralCache(size_t index, size_t size) {
   void *start = nullptr;
   void *end = nullptr;
   // actualNum是实际返回的内存块的数量，若有的话一次会多给几个，至少得给一个
+  // start和end都是输出型参数，调用者可以直接使用
   size_t actualNum =
       CentralCache::GetInstance()->FetchRangeObj(start, end, batchNum, size);
-  assert(actualNum > 1); //至少得给1个
+  assert(actualNum > 0); //至少得给1个
 
   if (actualNum == 1) {
     assert(start == end);

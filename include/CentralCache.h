@@ -1,5 +1,4 @@
 #pragma once
-
 #include "Common.h"
 
 // 设计为饿汉的单例模式

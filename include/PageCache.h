@@ -1,6 +1,6 @@
 #pragma once
-
 #include "Common.h"
+#include "ObjectPool.h"
 
 class PageCache {
 public:
@@ -19,6 +19,7 @@ public:
 
 private:
   SpanList _spanLists[NPAGES];
+  ObjectPool<Span> _spanPool;
   // 建立映射，找内存块属于那一个span
   // 之所以放在PageCache里，是之后PageCache往内存还数据的时候还要用到
   std::unordered_map<PAGE_ID, Span *> _idSpanMap;

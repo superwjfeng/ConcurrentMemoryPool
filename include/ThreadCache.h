@@ -18,4 +18,10 @@ private:
 };
 
 // TLS Thread Local Storage
+#ifdef _WIN64
+static _declspec(thread) ThreadCache *pTLS_thread_cache = nullptr;
+#elif _WIN32
+static _declspec(thread) ThreadCache *pTLS_thread_cache = nullptr;
+#else //linux 32
 static __thread ThreadCache *pTLS_thread_cache = nullptr;
+#endif

@@ -53,6 +53,7 @@ public:
 	//explicit TCMalloc_PageMap2(void *(*allocator)(size_t)) {
 	explicit TCMalloc_PageMap2() {
 		//allocator_ = allocator;
+		//reserve memory at first layer
 		memset(root_, 0, sizeof(root_));
 
 		PreallocateMoreMemory();
@@ -70,6 +71,8 @@ public:
 		ASSERT(i1 < ROOT_LENGTH);
 		root_[i1]->values[i2] = v;
 	}
+
+	// make that memory space from start to start+n is ready to use
 	bool Ensure(Number start, size_t n) {
 		for (Number key = start; key <= start + n - 1;) {
 			const Number i1 = key >> LEAF_BITS;

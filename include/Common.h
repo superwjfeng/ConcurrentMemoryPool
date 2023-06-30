@@ -1,13 +1,14 @@
 #pragma once
 #include <algorithm>
+#include <atomic>
 #include <cassert>
+#include <cstring>
 #include <iostream>
+#include <mutex>
 #include <thread>
 #include <time.h>
 #include <unordered_map>
 #include <vector>
-
-#include <mutex>
 
 //循环include，完全错误
 //#include "ThreadCache.h"
@@ -27,6 +28,9 @@ typedef unsigned long long PAGE_ID;
 #include <windows.h>
 typedef size_t PAGE_ID;
 #elif __LP64__
+#include <pthread.h>
+#include <sys/mman.h>
+#include <unistd.h>
 typedef unsigned long long PAGE_ID;
 #else // linux 32
 #include <pthread.h>
@@ -34,7 +38,6 @@ typedef unsigned long long PAGE_ID;
 #include <unistd.h>
 typedef size_t PAGE_ID;
 #endif
-
 
 inline static void *SystemAlloc(size_t kpage) {
 #ifdef _WIN32
@@ -66,6 +69,7 @@ inline static void SystemFree(void *ptr) {
   VirtualFree(ptr, 0, MEM_RELEASE);
 #else
   // Linux 32 sbrk unmmap
+  sbrk(ptr);
 #endif
 }
 
@@ -132,7 +136,7 @@ public:
 private:
   void *_freeList = nullptr;
   size_t _maxSize = 1; //用于慢启动调整算法
-  size_t _size = 0; //哈希桶对应的FreeList挂了多少个内存块
+  size_t _size = 0;    //哈希桶对应的FreeList挂了多少个内存块
 };
 
 //管理对象大小的对齐映射规则
@@ -144,7 +148,7 @@ public:
   // [1024+1,8*1024]         128byte对齐       freelist[72,128)
   // [8*1024+1,64*1024]      1024byte对齐      freelist[128,184)
   // [64*1024+1,256*1024]    8*1024byte对齐    freelist[184,208)
-  //static inline size_t _RoundUp(size_t size, size_t align_num) {
+  // static inline size_t _RoundUp(size_t size, size_t align_num) {
   //  size_t align_size;
   //  if (size % 8 != 0) {
   //    align_size = (size / align_num + 1) * align_num;
@@ -240,17 +244,17 @@ public:
 
 // 管理多个连续页的大块内存结构
 struct Span {
-  PAGE_ID _pageID = 0;          // 大块内存起始页的页号
-  size_t _n = 0;                // 页数
+  PAGE_ID _pageID = 0; // 大块内存起始页的页号
+  size_t _n = 0;       // 页数
 
-  Span *_next = nullptr;        // 双向链表的机构
+  Span *_next = nullptr; // 双向链表的机构
   Span *_prev = nullptr;
 
-  size_t _objSize = 0;          // 切好的小对象的大小
-  size_t _useCount = 0;         // 切成的小块内存，被分配给 thread cache 的计数
-  void *_freeList = nullptr;    // 切好的小块内存的自由链表
+  size_t _objSize = 0; // 切好的小对象的大小
+  size_t _useCount = 0; // 切成的小块内存，被分配给 thread cache 的计数
+  void *_freeList = nullptr; // 切好的小块内存的自由链表
 
-  bool _isUse = false;          // 是否在被使用，用于ReleaseSpanToPageCache中判断合并用
+  bool _isUse = false; // 是否在被使用，用于ReleaseSpanToPageCache中判断合并用
 };
 
 // 带头双向循环链表

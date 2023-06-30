@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cassert>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <thread>

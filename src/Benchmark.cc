@@ -34,13 +34,25 @@ void BenchmarkMalloc(size_t ntimes, size_t nworks, size_t rounds) {
   for (auto &t : vthread) {
     t.join();
   }
-  printf("%u个线程并发执行%u轮次，每轮次malloc %u次: 花费：%u ms\n", nworks,
-         rounds, ntimes, (unsigned int)malloc_costtime);
-  printf("%u个线程并发执行%u轮次，每轮次free %u次: 花费：%u ms\n", nworks,
-         rounds, ntimes, (unsigned int)free_costtime);
-  printf("%u个线程并发malloc&free %u次，总计花费：%u ms\n", nworks,
-         nworks * rounds * ntimes,
-         (unsigned int)(malloc_costtime + free_costtime));
+
+  printf("Malloc test setup: alloc/dealloc times %d, threads %d, round: %d\n", ntimes, nworks, rounds);
+  printf("%u threads run %u rounds concurrently, each thread ConcurrentAlloc %u times every round takes: %u ms\n",
+         nworks, rounds, ntimes, (unsigned int)malloc_costtime);
+  printf("%u threads run %u rounds concurrently, each thread ConcurrentFree %u times every round takes: %u ms\n",
+         nworks, rounds, ntimes, (unsigned int)free_costtime);
+  
+  unsigned int totalTime = (unsigned int)(malloc_costtime + free_costtime);
+  printf("%u threads run ConcurrentAlloc&Free %u times concurrently: takes totally %u ms\n",
+    nworks, nworks * rounds * ntimes, totalTime);
+  std::fstream file("dataMalloc.txt", std::ios::out | std::ios::app);
+  if (file.is_open()) {
+    file << nworks << ":" << totalTime << endl;
+    file.close();
+  }
+  else {
+    cout << "File open failed" << endl;
+  }
+
 }
 
 // 单轮次申请释放次数 线程数 轮次
@@ -73,20 +85,39 @@ void BenchmarkConcurrentMalloc(size_t ntimes, size_t nworks, size_t rounds) {
   for (auto &t : vthread) {
     t.join();
   }
-  printf("%u个线程并发执行%u轮次，每轮次concurrent alloc %u次: 花费：%u ms\n",
+  printf("ConcurentMalloc test setup: alloc/dealloc times %d, threads %d, round: %d\n", ntimes, nworks, rounds);
+  printf("%u threads run %u rounds concurrently, each thread ConcurrentAlloc %u times every round takes: %u ms\n",
          nworks, rounds, ntimes, (unsigned int)malloc_costtime);
-  printf("%u个线程并发执行%u轮次，每轮次concurrent dealloc %u次: 花费：%u ms\n",
+  printf("%u threads run %u rounds concurrently, each thread ConcurrentFree %u times every round takes: %u ms\n",
          nworks, rounds, ntimes, (unsigned int)free_costtime);
-  printf("%u个线程并发concurrent alloc&dealloc %u次，总计花费：%u ms\n", nworks,
-         nworks * rounds * ntimes,
-         (unsigned int)(malloc_costtime + free_costtime));
+
+  unsigned int totalTime = (unsigned int)(malloc_costtime + free_costtime);
+  printf("%u threads run ConcurrentAlloc&Free %u times concurrently: takes totally %u ms\n",
+    nworks, nworks * rounds * ntimes, totalTime);
+
+  //std::fstream file("dataConcurrentMalloc.txt", std::ios::out | std::ios::app);
+  std::fstream file("dataConcurrentMallocRadixTree.txt", std::ios::out | std::ios::app);
+  if (file.is_open()) {
+    file << nworks << ":" << totalTime << endl;
+    file.close();
+  }
+  else {
+    cout << "File open failed" << endl;
+  }
 }
+
+
 int main() {
-  size_t n = 10000;
-  cout << "==========================================================" << endl;
-  BenchmarkConcurrentMalloc(n, 4, 10);
-  cout << endl << endl;
-  //	BenchmarkMalloc(n, 4, 10);
-  cout << "==========================================================" << endl;
+  size_t ntimes = 10000;
+
+  for (size_t nworks = 1; nworks <= 50; nworks++) {
+    cout << "==========================================================" << endl;
+    BenchmarkConcurrentMalloc(ntimes, nworks, 10);
+    cout << endl << endl;
+    BenchmarkMalloc(ntimes, nworks, 10);
+    cout << "==========================================================" << endl;
+  }
+
+  //BenchmarkConcurrentMalloc(ntimes, 4, 10);
   return 0;
-}
+} 

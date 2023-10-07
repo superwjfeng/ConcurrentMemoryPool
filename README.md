@@ -68,7 +68,7 @@ tcmalloc的设计目标是在**多线程环境下**最大限度地减少内存�
 
 ### 三层设计
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\内存池结构.drawio.png" width="50%">
+<img src="doc/img/内存池结构.drawio.png" width="50%">
 
 * Thread cache 解决锁竞争的问题：线程缓存是每个线程独有的，用于小于256KB的内存的分配，线程从这里申请内存不需要加锁，每个线程独享一个cache，这也就是这个并发线程池高效的地方
 
@@ -84,13 +84,13 @@ tcmalloc的设计目标是在**多线程环境下**最大限度地减少内存�
 
 ### 主要API结构大纲
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\内存池结构API.drawio.png" width="80%">
+<img src="doc/img/内存池结构API.drawio.png" width="80%">
 
 ## *Thread Cache*
 
 ### Thread Cache 的结构设计
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\ThreadCache.drawio.png" width="60%">
+<img src="doc/img/ThreadCache.drawio.png" width="60%">
 
 ```c++
 class ThreadCache {
@@ -128,7 +128,7 @@ Thread Cache是哈希桶结构，每个桶是一个按桶的位置映射大小�
 
 ### 管理自由链表
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\FreeList头插.drawio.png">
+<img src="doc/img/FreeList头插.drawio.png">
 
 ```c++
 //获取内存对象中存储的头4或头8字节，即连接的下一个对象的地址
@@ -214,7 +214,7 @@ Tcmalloc考虑了自由链表长度和总占用内存两个方面，我们这里
 
 ### Central Cache的结构设计
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\CentralCache.drawio.png"  width="60%">
+<img src="doc/img/CentralCache.drawio.png"  width="60%">
 
 Central Cache和Thread Cache相似都采用了哈希桶的结构，并且它的哈希桶映射与内存块对齐规则也与Thread Cache一样。不同的是哈希桶挂的不是内存块的自由链表，而是SpanList
 
@@ -234,15 +234,7 @@ Central Cache只有一个，所以把Central Cache设计成饿汉单例（注意
 
 桶锁：每个哈希桶有一个锁。所以只有在找的是同一个锁的时候才会有竞争，否则会去找不同的桶
 
-
-
-
-
-
-
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\FetchRangeObj.drawio.png" width="60%">
-
-
+<img src="doc/img/FetchRangeObj.drawio.png" width="60%">
 
 一个Span每次给Thread Cache多少个切好的内存块合适呢？给固定数量是不合适的，一是因为不同的Thread要的频率不同，二是因为大的内存块给的数量跟小的一样可能会造成严重的浪费。采用**慢开始反馈调节算法**：最开始不会一次向central cache 要太多，要太多了可能会用不完造成浪费。但是如果不断地往central cache要，每要一次maxSize++（maxSize是FreeList的属性），那么每次要的batchNum会越来越多，直到上限。而且内存块越小，上限就越高。
 
@@ -263,10 +255,6 @@ static size_t NumMoveSize(size_t size) {
     return num;
 }
 ```
-
-
-
-
 
 以8字节为例，要去256*1024/8=32768个，此时又太多了，所以定了个上限500。若取一个256KB的，至少要取2个
 
@@ -293,7 +281,7 @@ static size_t NumMovePage(size_t size)
 100 << PAGE_SHIFT
 ```
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\span切分为小内存.drawio.png" width="70%">
+<img src="doc/img/span切分为小内存.drawio.png" width="70%">
 
 把大块span切成小块内存后以FreeList的方式连接起来，注意第一次连接是把span的 `_freeList` 跟内存块连接起来。尾插效果会比较好，头插的话SpanList中的地址会倒过来
 
@@ -321,7 +309,7 @@ static size_t NumMovePage(size_t size)
 
 ### Page Cache的结构设计
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\PageCache.drawio.png" width="60%">
+<img src="doc/img/PageCache.drawio.png" width="60%">
 
 Page Cache也一样设计成单例模式
 
@@ -363,7 +351,7 @@ NewSpan的递归可能涉及到递归死锁的问题。可以通过递归互斥�
 
 解决方法是在Span里增加一个 `bool _isUse=false;` 属性来表明是否在使用，只要分配给了Central Cache，那么就要变成 `true`
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\span合并.drawio.png" width="70%">
+<img src="doc/img/span合并.drawio.png" width="70%">
 
 注意和Central Cache中的不同，kSpan是返回给Central Cache的，它之后会被切分为小块内存，所以每一个页都要建立映射，可以让它在在从Thread Cache返回给Central Cache的时候确认是属于哪一个Span的。而nSpan暂时是留在Page Cache里的，它暂时不需要被切分。但是我们也要通过它来进行合并以返回给系统，返回的时候确认id和span的映射只需要找首尾巴的页就行了，因为需要向前向后合并，既然还没有被喂给Central Cache，把中间必然是连续的
 
@@ -385,13 +373,13 @@ NewSpan的递归可能涉及到递归死锁的问题。可以通过递归互斥�
 
 单进程实验：可以看到，我自己实现的tcmalloc和glibc的ptmalloc2相比，尽管实际实现的tcmalloc代码量大概在十万行细节，我这里仅仅实现了核心的一两千行代码，很多细节都没有考虑在内，但性能已经相差不多了
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\BenchmarkBeforeRadix.png">
+<img src="doc/img/BenchmarkBeforeRadix.png">
 
 
 
 ### 性能瓶颈分析
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\性能测试.png">
+<img src="doc/img/性能测试.png">
 
 直接利用vs提供的性能分析工具，其中第一项是Benchmark的加锁，但是可以发现第三项占用了大量时间
 
@@ -415,7 +403,7 @@ ConcurrentAlloc.h和ObjectPool.h里获取ThreadCache同理
 
 Trie（re**Trie**val）**前缀树**或**字典树**，是一种有序树，用于保存关联数组，其中的键通常是字符串。与二叉查找树不同，键不是直接保存在节点中，而是由节点在树中的位置决定。一个节点的所有子孙都有相同的前缀，也就是这个节点对应的字符串，而根节点对应空字符串。一般情况下，不是所有的节点都有对应的值，只有叶子节点和部分内部节点所对应的键才有相关的值
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\字典树.png" width="30%">
+<img src="doc/img/字典树.png" width="30%">
 
 * 根节点不包含字符，除根节点外每一个节点都**只包含一个Key的一个字符**
 * 从根节点到某一节点，路径上经过的字符连接起来，为该节点对应的Key
@@ -427,7 +415,7 @@ Trie（re**Trie**val）**前缀树**或**字典树**，是一种有序树，用�
 
 树的叶子结点是实际的数据条目。每个结点有固定数量 `2^n`指针指向子结点（每个指针称为槽slot，n为划分的基的大小）
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\RadixTree.png" width="50%">
+<img src="doc/img/RadixTree.png" width="50%">
 
 ### 用基数树优化
 
@@ -435,7 +423,7 @@ Trie（re**Trie**val）**前缀树**或**字典树**，是一种有序树，用�
 
 分别设计了三种基数树，即一层、两层和三层的，这三种基数树使用的空间没有变化的。32位下的时候一层或两层基数树就够了，但64位下是不够的  `2^64/2^13=2^51`，直接开一个连续的 `2^51` 的Vector 是不可能的，所以得用3层。一层的优势在于直接就开好了，访问非常简单，**一层本质上就是一个一次性开完的有 `2^19` 个元素的大哈希vector** 。多层的是多层哈希，稍微麻烦了一点，实际上两层也是直接开好，但是三层就要按需开了
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\两层基数树.drawio.png">
+<img src="doc/img/两层基数树.drawio.png">
 
 **为什么此时去基数树里操作就不需要加锁解锁了？**
 
@@ -446,7 +434,7 @@ Trie（re**Trie**val）**前缀树**或**字典树**，是一种有序树，用�
 
 多线程实验，在实现了基数树管理Span之后效率提升十分明显，尤其是在多线程条件性能差异巨大
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\BenchmarkAfterRadix.png">
+<img src="doc/img/BenchmarkAfterRadix.png">
 
 ## *工程管理*
 

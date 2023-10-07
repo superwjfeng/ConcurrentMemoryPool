@@ -26,7 +26,7 @@ https://jiajunhuang.com/articles/2020_10_10-tcmalloc.md.html
 
 ### 实现
 
-<img src="C:\Users\Weijian Feng\iCloudDrive\Desktop\Notes\CS\内存池\doc\img\定长内存池.drawio.png">
+<img src="doc/img/定长内存池.drawio.png">
 
 用自由链表 `void *_freeList` 来管理切好的小块内存，内存块头上存下一个内存块的地址，因此一个内存块至少要存4字节（32位）或8字节（64位）
 

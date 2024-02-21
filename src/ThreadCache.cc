@@ -1,13 +1,19 @@
-#include "../include/ThreadCache.h"
-#include "../include/CentralCache.h"
+#include "ThreadCache.h"
+
+#include "CentralCache.h"
 
 void *ThreadCache::FetchFromCentralCache(size_t index, size_t size) {
   // 慢开始反馈调整算法：大对象给多一点，小对象给少一点
-
-  // 一开始给少一点，MaxSize慢慢加
+  // TODO: <windows.h> 包含了一个 min 宏，为什么会与 std::min冲突？
+#if defined(_WIN64) || defined(_WIN32)
   size_t batchNum =
       min(_freeLists[index].MaxSize(), SizeClass::NumMoveSize(size));
-
+#endif
+#if defined(__LP64__) || defined(__linux__)
+  size_t batchNum =
+      std::min(_freeLists[index].MaxSize(), SizeClass::NumMoveSize(size));
+#endif
+  // 一开始给少一点，MaxSize慢慢加
   if (_freeLists[index].MaxSize() == batchNum) {
     _freeLists[index].MaxSize() += 1;
   }
@@ -19,7 +25,7 @@ void *ThreadCache::FetchFromCentralCache(size_t index, size_t size) {
   // start和end都是输出型参数，调用者可以直接使用
   size_t actualNum =
       CentralCache::GetInstance()->FetchRangeObj(start, end, batchNum, size);
-  assert(actualNum > 0); //至少得给1个
+  assert(actualNum > 0);  // 至少得给1个
 
   if (actualNum == 1) {
     assert(start == end);
@@ -56,13 +62,13 @@ void ThreadCache::Deallocate(void *ptr, size_t size) {
     ListTooLong(_freeLists[index], size);
   }
 }
-// 自由链表太长了，往回回收内存
+// 自由链表太长了，往回回收内存，size 是用来算是哪个span的
 void ThreadCache::ListTooLong(FreeList &list, size_t size) {
   void *start = nullptr;
   void *end = nullptr;
   // start是输出型参数，从list中拿下来后再给ReleaseListToSpans用
   list.PopRange(start, end, list.MaxSize());
 
-  // 返回给Central Cache
+  // 返回给Central Cache，不需要给 end，遍历到空就行  
   CentralCache::GetInstance()->ReleaseListToSpans(start, size);
 }

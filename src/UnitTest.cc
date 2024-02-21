@@ -1,5 +1,5 @@
-#include "../include/ConcurrentAlloc.h"
-#include "../include/ObjectPool.h"
+#include "ConcurrentAlloc.h"
+#include "ObjectPool.h"
 
 struct TreeNode {
   int _val;
@@ -167,14 +167,14 @@ void BigAlloc() {
   ConcurrentFree(p2);
 }
 
-// int main() {
-//   //TestObjectPool();
-//   //TLSTest();
-//   //TestAddressShift();
-//   //TestConcurrentAlloc1();
-//   //TestConcurrentAlloc2();
-//   //TestConcurrentFree1();
-//   //TestMultiThread();
-//   BigAlloc();
-//   return 0;
-// }
+int main() {
+  //TestObjectPool();
+  //TLSTest();
+  //TestAddressShift();
+  //TestConcurrentAlloc1();
+  //TestConcurrentAlloc2();
+  //TestConcurrentFree1();
+  //TestMultiThread();
+  BigAlloc();
+  return 0;
+}

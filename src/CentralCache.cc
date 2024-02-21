@@ -1,14 +1,15 @@
-#include "../include/CentralCache.h"
-#include "../include/PageCache.h"
+#include "CentralCache.h"
 
-CentralCache CentralCache::_sInst; //定义
+#include "PageCache.h"
+
+CentralCache CentralCache::_sInst;  // 定义
 
 // size是span中每个内存块的大小
 Span *CentralCache::GetOneSpan(SpanList &list, size_t size) {
   // 查看当前的spanList中是否有还有未分配对象的span
   Span *it = list.Begin();
   while (it != list.End()) {
-    //只要不为空就说明有空闲的span挂着
+    // 只要不为空就说明有空闲的span挂着
     if (it->_freeList != nullptr) {
       return it;
     } else {
@@ -23,7 +24,7 @@ Span *CentralCache::GetOneSpan(SpanList &list, size_t size) {
   // size越小分配的page越少，size越大分配的page越大
   PageCache::GetInstance()->getPageMtx().lock();
   Span *span = PageCache::GetInstance()->NewSpan(SizeClass::NumMovePage(size));
-  span->_isUse = true; // 在被使用了，防止被PageCache误合并归还
+  span->_isUse = true;  // 在被使用了，防止被PageCache误合并归还
   span->_objSize = size;
   PageCache::GetInstance()->getPageMtx().unlock();
 
@@ -33,7 +34,7 @@ Span *CentralCache::GetOneSpan(SpanList &list, size_t size) {
   // 切割span，首先计算page的起始地址和大块内存的大小（字节数）
   // 计算方法：通过页号左移PAGE_SHIFT来计算
   char *start = (char *)(span->_pageID << PAGE_SHIFT);
-  size_t bytes = span->_n << PAGE_SHIFT; // 大块内存的总字节数，通过页数_n计算
+  size_t bytes = span->_n << PAGE_SHIFT;  // 大块内存的总字节数，通过页数_n计算
   char *end = start + bytes;
 
   // 把大块内存切成span后以SpanList的方式连接起来
@@ -48,12 +49,12 @@ Span *CentralCache::GetOneSpan(SpanList &list, size_t size) {
     start += size;
   }
 
-  NextObj(tail) = nullptr; // why?
+  NextObj(tail) = nullptr;  // why?
 
   // 当切好span以后，需要把span挂到桶里面去的时候再加锁
   // i.e. 只要访问桶，就需要加锁
   list._mtx.lock();
-  list.PushFront(span); // 头插进list中
+  list.PushFront(span);  // 头插进list中
 
   return span;
 }
@@ -81,7 +82,7 @@ size_t CentralCache::FetchRangeObj(void *&start, void *&end, size_t batchNum,
   //   end = NextObj(end);
   // }
   size_t i = 0;
-  size_t actualNum = 1; //实际获取了多少个
+  size_t actualNum = 1;  // 实际获取了多少个
   while (i < batchNum - 1 && NextObj(end) != nullptr) {
     end = NextObj(end);
     i++;

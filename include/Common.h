@@ -1,4 +1,7 @@
-#pragma once
+#ifndef COMMON_H_
+#define COMMON_H_
+#include <time.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cassert>
@@ -7,16 +10,15 @@
 #include <iostream>
 #include <mutex>
 #include <thread>
-#include <time.h>
 #include <unordered_map>
 #include <vector>
 
-//循环include，完全错误
-//#include "ThreadCache.h"
-//#include "CentralCache.h"
-//#include "PageCache.h"
-//#include "ObjectPool.h"
-//#include "ConcurrentAlloc.h"
+// 循环include，完全错误
+// #include "ThreadCache.h"
+// #include "CentralCache.h"
+// #include "PageCache.h"
+// #include "ObjectPool.h"
+// #include "ConcurrentAlloc.h"
 
 using std::cout;
 using std::endl;
@@ -33,7 +35,7 @@ typedef size_t PAGE_ID;
 #include <sys/mman.h>
 #include <unistd.h>
 typedef unsigned long long PAGE_ID;
-#else // linux 32
+#else  // linux 32
 #include <pthread.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -59,8 +61,7 @@ inline static void *SystemAlloc(size_t kpage) {
 
 #endif
 
-  if (ptr == nullptr)
-    throw std::bad_alloc();
+  if (ptr == nullptr) throw std::bad_alloc();
 
   return ptr;
 }
@@ -70,11 +71,12 @@ inline static void SystemFree(void *ptr) {
   VirtualFree(ptr, 0, MEM_RELEASE);
 #else
   // Linux 32 sbrk unmmap
-  sbrk(ptr);
+  // TODO: finish this free part
+  brk(ptr);
 #endif
 }
 
-static const size_t MAX_BYTES = 256 * 1024; // Thread Cache最大可以取256 KB
+static const size_t MAX_BYTES = 256 * 1024;  // Thread Cache最大可以取256 KB
 static const size_t NFREELISTS = 208;
 static const size_t NPAGES = 129;
 static const size_t PAGE_SHIFT = 13;
@@ -85,7 +87,7 @@ static void *&NextObj(void *obj) { return *(void **)obj; }
 
 // 管理切分好的小对象的自由列表
 class FreeList {
-public:
+ public:
   // 自由链表头插
   void Push(void *obj) {
     assert(obj);
@@ -96,7 +98,7 @@ public:
     _size++;
   };
 
-  //支持范围内push多个对象
+  // 支持范围内push多个对象
   void PushRange(void *start, void *end, size_t n) {
     NextObj(end) = _freeList;
     _freeList = start;
@@ -120,7 +122,7 @@ public:
 
   // 自由链表头删
   void *Pop() {
-    //头删
+    // 头删
     assert(_freeList);
     void *obj = _freeList;
     _freeList = NextObj(obj);
@@ -134,15 +136,15 @@ public:
 
   size_t Size() { return _size; }
 
-private:
+ private:
   void *_freeList = nullptr;
-  size_t _maxSize = 1; //用于慢启动调整算法
-  size_t _size = 0;    //哈希桶对应的FreeList挂了多少个内存块
+  size_t _maxSize = 1;  // 用于慢启动调整算法
+  size_t _size = 0;     // 哈希桶对应的FreeList挂了多少个内存块
 };
 
-//管理对象大小的对齐映射规则
+// 管理对象大小的对齐映射规则
 class SizeClass {
-public:
+ public:
   // 整体控制在最多10%左右的内碎片浪费
   // [1,128]                 8byte对齐         freelist[0,16)
   // [128+1,1024]            16byte对齐        freelist[16,72)
@@ -164,7 +166,7 @@ public:
     return ((size + align_num - 1) & ~(align_num - 1));
   }
 
-  //注意：RoundUp返回的是对齐到的字节数
+  // 注意：RoundUp返回的是对齐到的字节数
   static inline size_t RoundUp(size_t size) {
     if (size <= 128) {
       return _RoundUp(size, 8);
@@ -177,21 +179,19 @@ public:
     } else if (size <= 256 * 1024) {
       return _RoundUp(size, 8 * 1024);
     } else {
-      //超过256KB的大内存块以页为单位对齐
+      // 超过256KB的大内存块以页为单位对齐
       return _RoundUp(size, 1 << PAGE_SHIFT);
     }
   }
 
-  //一次thread cache 从 central cache 获取多少个对象
+  // 一次thread cache 从 central cache 获取多少个对象
   static size_t NumMoveSize(size_t size) {
     assert(size > 0);
     //[2, 512]，一次批量移动多少个对象的（慢启动）上限值
     // 小对象一次批量上限高
     int num = MAX_BYTES / size;
-    if (num < 2)
-      num = 2;
-    if (num > 512)
-      num = 512;
+    if (num < 2) num = 2;
+    if (num > 512) num = 512;
     return num;
   }
 
@@ -208,21 +208,21 @@ public:
     return nPage;
   }
 
-  //计算映射的是哪一个自由链表桶
-  // static inline size_t _Index(size_t size, size_t align_num) {
-  //  if (size % align_num == 0) {
-  //    return size / align_num - 1;
-  //  } else {
-  //    return size / align_num;
-  //  }
-  //}
-  // 一种非常巧妙的算法
+  // 计算映射的是哪一个自由链表桶
+  //  static inline size_t _Index(size_t size, size_t align_num) {
+  //   if (size % align_num == 0) {
+  //     return size / align_num - 1;
+  //   } else {
+  //     return size / align_num;
+  //   }
+  // }
+  //  一种非常巧妙的算法
   static inline size_t _Index(size_t size, size_t align_shift) {
     return ((size + (1 << align_shift) - 1) >> align_shift) - 1;
   }
   static inline size_t Index(size_t size) {
     assert(size <= MAX_BYTES);
-    //每个区间有多少条链
+    // 每个区间有多少条链
     static int group_array[4] = {16, 56, 56, 56};
     if (size <= 128) {
       return _Index(size, 3);
@@ -245,26 +245,26 @@ public:
 
 // 管理多个连续页的大块内存结构
 struct Span {
-  PAGE_ID _pageID = 0; // 大块内存起始页的页号
-  size_t _n = 0;       // 页数
+  PAGE_ID _pageID = 0;        // 大块内存起始页的页号
+  size_t _n = 0;              // 页数
 
-  Span *_next = nullptr; // 双向链表的机构
+  Span *_next = nullptr;      // 双向链表的结构
   Span *_prev = nullptr;
 
-  size_t _objSize = 0; // 切好的小对象的大小
-  size_t _useCount = 0; // 切成的小块内存，被分配给 thread cache 的计数
-  void *_freeList = nullptr; // 切好的小块内存的自由链表
+  size_t _objSize = 0;        // 切好的小对象的大小
+  size_t _useCount = 0;       // 切成的小块内存，被分配给 thread cache 的计数
+  void *_freeList = nullptr;  // 切好的小块内存的自由链表
 
-  bool _isUse = false; // 是否在被使用，用于ReleaseSpanToPageCache中判断合并用
+  bool _isUse = false;        // 是否在被使用，用于ReleaseSpanToPageCache中判断合并用
 };
 
 // 带头双向循环链表
 class SpanList {
-public:
+ public:
   // std::mutex GetMutex() {
   //   return this->_mtx;
   // }
-public:
+ public:
   // 必须要用构造函数初始化
   SpanList() {
     _head = new Span;
@@ -282,7 +282,7 @@ public:
 
   Span *PopFront() {
     Span *front = _head->_next;
-    Erase(front); //记住Erase中并没有delete pos
+    Erase(front);  // 记住Erase中并没有delete pos
     return front;
   }
 
@@ -304,12 +304,14 @@ public:
     Span *next = pos->_next;
     prev->_next = next;
     next->_prev = prev;
-    //不要delete pos，因为之后要还给Page Cache
+    // 不要delete pos，因为之后要还给Page Cache
   }
 
-private:
-  Span *_head = nullptr; // 哨兵位
+ private:
+  Span *_head = nullptr;  // 哨兵位
 
-public:
-  std::mutex _mtx; // 桶锁
+ public:
+  std::mutex _mtx;  // 桶锁
 };
+
+#endif  // COMMON_H_

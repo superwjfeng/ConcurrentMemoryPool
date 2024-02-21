@@ -1,20 +1,21 @@
 /**
- * @file PageCache.h
+ * @file PageCacheRadix.h
  * @author Weijian Feng (wj.feng@tum.de)
- * @brief Page Cache singleton & gloabl lock
- * @version 0.1
+ * @brief Page Cache uses Radix Tree to improve performance
+ * @version 0.2
  * @date 2024-02-21
  * 
  * @copyright Copyright (c) 2024
  * 
  */
-#ifndef PAGE_CACHE_H_
-#define PAGE_CACHE_H_
+#ifndef PAGE_CACHE_RADIX_H_
+#define PAGE_CACHE_RADIX_H_
 
 #include "Common.h"
 #include "ObjectPool.h"
 #include "PageMap.h"
 
+// Modify with Radix Tree
 class PageCache {
  public:
   static PageCache *GetInstance() { return &_sInst; }
@@ -22,26 +23,12 @@ class PageCache {
   // 获取从对象到span的映射
   Span *MapObjectToSpan(void *obj);
 
-  /**
-   * @brief 释放空闲span回到Page Cache，并合并相邻的span
-   * 
-   * @param span we want to release
-   */
+  // 释放空闲span回到Page Cache，并合并相邻的span
   void ReleaseSpanToPageCache(Span *span);
 
-  /**
-   * @brief 获取一个k页的span
-   * 
-   * @param k number of pages of the span
-   * @return Span* 
-   */
+  // 获取一个k页的span
   Span *NewSpan(size_t k);
 
-  /**
-   * @brief Get the Page Mtx object
-   * 
-   * @return std::mutex& 
-   */
   std::mutex &getPageMtx() { return _pageMtx; }
 
  private:
@@ -49,8 +36,8 @@ class PageCache {
   ObjectPool<Span> _spanPool;
   // 建立映射，找内存块属于那一个span
   // 之所以放在PageCache里，是之后PageCache往内存还数据的时候还要用到
-  // 注意：std库用的空间配置器最后还是去调了malloc
-  std::unordered_map<PAGE_ID, Span *> _idSpanMap;
+  // std::unordered_map<PAGE_ID, Span *> _idSpanMap;
+  TCMalloc_PageMap1<32 - PAGE_SHIFT> _idSpanMap;
 
   // Singeleton
   PageCache(){};
@@ -60,4 +47,4 @@ class PageCache {
   std::mutex _pageMtx;
 };
 
-#endif  // PAGE_CACHE_H_
+#endif  // PAGE_CACHE_RADIX_H_

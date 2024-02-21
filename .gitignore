@@ -1,1 +1,35 @@
 /MemoryPoolOnWin
+build/
+bin/
+lib/
+
+# 排除Debug文件夹和.vs文件夹
+Debug/
+.vs/
+x64/
+
+# 忽略编译生成的可执行文件
+*.exe
+*.out
+*.app
+*.o
+*.so
+*.dll
+
+# 忽略ide配置文件
+.idea/
+.vsdoe/
+.VSCodeCounter/
+
+# 排除以.sln、.vcxproj、.vcxproj.filters、.vcsproj.user为结尾的文件
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+#macOS
+.DS_Store
+
+#protobuf
+*.pb.cc
+*.pb.h

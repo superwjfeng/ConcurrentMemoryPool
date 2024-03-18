@@ -50,7 +50,7 @@ inline static void *SystemAlloc(size_t kpage) {
   // linux下brk mmap等
   size_t size_byte = kpage << 13;
   void *ptr = nullptr;
-  ptr = sbrk(0);
+  ptr = sbrk(size_byte);
   if (sbrk(size_byte) == (void *)-1) {
     ptr = mmap(nullptr, size_byte, PROT_READ | PROT_WRITE,
                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -72,7 +72,7 @@ inline static void SystemFree(void *ptr) {
 #else
   // Linux 32 sbrk unmmap
   // TODO: finish this free part
-  brk(ptr);
+  //sbrk(-size_byte);
 #endif
 }
 
